@@ -1,4 +1,4 @@
-return require("telescope").register_extension {
+return require("telescope").register_extension({
   setup = function(topts)
     local specific_opts = vim.F.if_nil(topts.specific_opts, {})
     topts.specific_opts = nil
@@ -7,14 +7,14 @@ return require("telescope").register_extension {
       topts = topts[1]
     end
 
-    local pickers = require "telescope.pickers"
-    local finders = require "telescope.finders"
+    local pickers = require("telescope.pickers")
+    local finders = require("telescope.finders")
     local conf = require("telescope.config").values
-    local actions = require "telescope.actions"
-    local action_state = require "telescope.actions.state"
-    local strings = require "plenary.strings"
-    local entry_display = require "telescope.pickers.entry_display"
-    local utils = require "telescope.utils"
+    local actions = require("telescope.actions")
+    local action_state = require("telescope.actions.state")
+    local strings = require("plenary.strings")
+    local entry_display = require("telescope.pickers.entry_display")
+    local utils = require("telescope.utils")
 
     __TelescopeUISelectSpecificOpts = vim.F.if_nil(
       __TelescopeUISelectSpecificOpts,
@@ -45,22 +45,22 @@ return require("telescope").register_extension {
             return indexed_items, widths
           end,
           make_displayer = function(widths)
-            return entry_display.create {
+            return entry_display.create({
               separator = " ",
               items = {
                 { width = widths.idx + 1 }, -- +1 for ":" suffix
                 { width = widths.command_title },
                 { width = widths.client_name },
               },
-            }
+            })
           end,
           make_display = function(displayer)
             return function(e)
-              return displayer {
-                { e.value.idx .. ":", "TelescopePromptPrefix" },
+              return displayer({
+                { e.value.idx .. ":",       "TelescopePromptPrefix" },
                 { e.value.add.command_title },
-                { e.value.add.client_name, "TelescopeResultsComment" },
-              }
+                { e.value.add.client_name,  "TelescopeResultsComment" },
+              })
             end
           end,
           make_ordinal = function(e)
@@ -100,49 +100,61 @@ return require("telescope").register_extension {
         return opts.format_item(e.text)
       end)
       pickers
-        .new(topts, {
-          prompt_title = prompt,
-          finder = finders.new_table {
-            results = indexed_items,
-            entry_maker = function(e)
-              return {
-                value = e,
-                display = make_display,
-                ordinal = make_ordinal(e),
-              }
+          .new(topts, {
+            prompt_title = prompt,
+            finder = finders.new_table({
+              results = indexed_items,
+              entry_maker = function(e)
+                return {
+                  value = e,
+                  display = make_display,
+                  ordinal = make_ordinal(e),
+                }
+              end,
+            }),
+            attach_mappings = function(prompt_bufnr)
+              actions.select_default:replace(function()
+                local selection = action_state.get_selected_entry()
+                -- vim.notify("no select")
+                if selection == nil then
+                  utils.__warn_no_selection("ui-select")
+                  return
+                end
+
+                local picker = action_state.get_current_picker(prompt_bufnr)
+                local original_win_id = picker.original_win_id
+                local cursor_valid, original_cursor = pcall(vim.api.nvim_win_get_cursor, original_win_id)
+
+                actions.close_pum(prompt_bufnr)
+
+                require("telescope.pickers").on_close_prompt(prompt_bufnr)
+                pcall(vim.api.nvim_set_current_win, original_win_id)
+                if cursor_valid and vim.api.nvim_get_mode().mode == "i" and picker._original_mode ~= "i" then
+                  pcall(vim.api.nvim_win_set_cursor, original_win_id, { original_cursor[1], original_cursor[2] + 1 })
+                end
+
+                on_choice(selection.value.text, selection.value.idx)
+              end)
+              actions.close:replace(function()
+                local picker = action_state.get_current_picker(prompt_bufnr)
+                local original_win_id = picker.original_win_id
+                local cursor_valid, original_cursor = pcall(vim.api.nvim_win_get_cursor, original_win_id)
+
+                actions.close_pum(prompt_bufnr)
+
+                require("telescope.pickers").on_close_prompt(prompt_bufnr)
+                pcall(vim.api.nvim_set_current_win, original_win_id)
+                if cursor_valid and vim.api.nvim_get_mode().mode == "i" and picker._original_mode ~= "i" then
+                  pcall(vim.api.nvim_win_set_cursor, original_win_id, { original_cursor[1], original_cursor[2] + 1 })
+                end
+
+                on_choice(nil, nil)
+              end)
+              return true
             end,
-          },
-          attach_mappings = function(prompt_bufnr)
-            actions.select_default:replace(function()
-              local selection = action_state.get_selected_entry()
-              -- vim.notify("no select")
-              if selection == nil then
-                utils.__warn_no_selection "ui-select"
-                return
-              end
-              actions.close(prompt_bufnr)
-              on_choice(selection.value.text, selection.value.idx)
-            end)
-            actions.close:replace(function()
-              local picker = action_state.get_current_picker(prompt_bufnr)
-              local original_win_id = picker.original_win_id
-              local cursor_valid, original_cursor = pcall(vim.api.nvim_win_get_cursor, original_win_id)
-
-              actions.close_pum(prompt_bufnr)
-
-              require("telescope.pickers").on_close_prompt(prompt_bufnr)
-              pcall(vim.api.nvim_set_current_win, original_win_id)
-              if cursor_valid and vim.api.nvim_get_mode().mode == "i" and picker._original_mode ~= "i" then
-                pcall(vim.api.nvim_win_set_cursor, original_win_id, { original_cursor[1], original_cursor[2] + 1 })
-              end
-
-              on_choice(nil, nil)
-            end)
-            return true
-          end,
-          sorter = conf.generic_sorter(topts),
-        })
-        :find()
+            sorter = conf.generic_sorter(topts),
+          })
+          :find()
     end
   end,
-}
+})
